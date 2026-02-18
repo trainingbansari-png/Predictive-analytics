@@ -1,5 +1,8 @@
 import streamlit as st
 import pandas as pd
+import sklearn
+print(sklearn.__version__)
+
 from sklearn.linear_model import LogisticRegression
 
 # Load pre-trained model
