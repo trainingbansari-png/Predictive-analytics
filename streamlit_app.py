@@ -1,13 +1,10 @@
 import streamlit as st
 import pandas as pd
-import sklearn
-print(sklearn.__version__)
+import joblib
 
-from sklearn.linear_model import LogisticRegression
-
-# Load pre-trained model
-model = LogisticRegression(max_iter=1000)
-model.fit(X_train, y_train)
+# Load the pre-trained model and scaler
+model = joblib.load('churn_model.pkl')
+scaler = joblib.load('scaler.pkl')
 
 # Create a Streamlit app
 st.title("Customer Churn Prediction")
@@ -17,12 +14,17 @@ tenure = st.slider("Tenure", 0, 72, 10)
 monthly_charges = st.number_input("Monthly Charges", min_value=0, max_value=1000, value=70)
 total_charges = st.number_input("Total Charges", min_value=0, max_value=100000, value=3000)
 
-# Make prediction
+# Prepare input features for prediction
 features = pd.DataFrame([[tenure, monthly_charges, total_charges]], columns=['tenure', 'MonthlyCharges', 'TotalCharges'])
-prediction = model.predict(features)
+
+# Scale the features using the same scaler that was used during training
+features_scaled = scaler.transform(features)
+
+# Make prediction
+prediction = model.predict(features_scaled)
 
 # Display the result
-if prediction == 1:
+if prediction[0] == 1:
     st.write("The customer will churn.")
 else:
     st.write("The customer will not churn.")
