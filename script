@@ -3,6 +3,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 import joblib
+print(joblib.__version__)
 
 # Example data loading (replace with your actual data)
 df = pd.read_csv("path/to/telco-customer-churn.csv")
