@@ -163,6 +163,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 This project demonstrates how to use machine learning to predict customer churn in a subscription-based service, with an interactive dashboard that allows businesses to explore and make predictions about customer churn.
 
-Let me know if you need further assistance with anything!
-# Predictive-analytics
-Predictive Analytics for Real world data
