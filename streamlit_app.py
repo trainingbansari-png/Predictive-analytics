@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
+import os
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.compose import ColumnTransformer
@@ -13,17 +14,26 @@ st.set_page_config(page_title="Customer Churn Dashboard", layout="wide")
 
 st.title("📊 Customer Churn Interactive Dashboard")
 
-# ---------------- Load & Train Model ----------------
+# ---------------- Train Model ----------------
 @st.cache_resource
 def train_model():
 
-    df = pd.read_csv("Telco-Customer-Churn.csv")
+    DATA_FILE = "Telco-Customer-Churn.csv"
 
-    # Clean data
-    df["TotalCharges"] = pd.to_numeric(df["TotalCharges"], errors="coerce")
-    df["TotalCharges"] = df["TotalCharges"].fillna(df["TotalCharges"].mean())
+    if not os.path.exists(DATA_FILE):
+        st.error(f"{DATA_FILE} not found in repository!")
+        st.stop()
 
-    df.drop("customerID", axis=1, inplace=True)
+    df = pd.read_csv(DATA_FILE)
+
+    # Clean TotalCharges safely
+    if "TotalCharges" in df.columns:
+        df["TotalCharges"] = pd.to_numeric(df["TotalCharges"], errors="coerce")
+        df["TotalCharges"] = df["TotalCharges"].fillna(df["TotalCharges"].mean())
+
+    # Drop customerID safely
+    if "customerID" in df.columns:
+        df = df.drop("customerID", axis=1)
 
     X = df.drop("Churn", axis=1)
     y = df["Churn"].map({"No": 0, "Yes": 1})
@@ -53,32 +63,32 @@ def train_model():
 
     return pipeline, df
 
+
 model, full_df = train_model()
 
-# ---------------- Sidebar ----------------
-st.sidebar.header("Filters")
+# ---------------- Sidebar Filters ----------------
+st.sidebar.header("Filter Customers")
 
 df = full_df.copy()
 
-# Gender Filter
-gender_filter = st.sidebar.multiselect(
-    "Select Gender",
-    options=df["gender"].unique(),
-    default=df["gender"].unique()
-)
-df = df[df["gender"].isin(gender_filter)]
+if "gender" in df.columns:
+    gender_filter = st.sidebar.multiselect(
+        "Select Gender",
+        options=df["gender"].unique(),
+        default=df["gender"].unique()
+    )
+    df = df[df["gender"].isin(gender_filter)]
 
-# Contract Filter
-contract_filter = st.sidebar.multiselect(
-    "Select Contract",
-    options=df["Contract"].unique(),
-    default=df["Contract"].unique()
-)
-df = df[df["Contract"].isin(contract_filter)]
+if "Contract" in df.columns:
+    contract_filter = st.sidebar.multiselect(
+        "Select Contract",
+        options=df["Contract"].unique(),
+        default=df["Contract"].unique()
+    )
+    df = df[df["Contract"].isin(contract_filter)]
 
 # ---------------- Prediction ----------------
-X_pred = df.drop(["Churn"], axis=1)
-X_pred = X_pred.drop("customerID", axis=1)
+X_pred = df.drop("Churn", axis=1, errors="ignore")
 
 predictions = model.predict(X_pred)
 
@@ -88,7 +98,8 @@ df["Prediction"] = np.where(predictions == 1, "Churn", "No Churn")
 total_customers = len(df)
 churn_count = len(df[df["Prediction"] == "Churn"])
 no_churn_count = len(df[df["Prediction"] == "No Churn"])
-churn_rate = round((churn_count / total_customers) * 100, 2)
+
+churn_rate = round((churn_count / total_customers) * 100, 2) if total_customers > 0 else 0
 
 col1, col2, col3, col4 = st.columns(4)
 
@@ -111,23 +122,25 @@ with col1:
     )
     st.plotly_chart(fig1, use_container_width=True)
 
-with col2:
-    fig2 = px.box(
-        df,
-        x="Prediction",
-        y="tenure",
-        title="Tenure vs Churn"
-    )
-    st.plotly_chart(fig2, use_container_width=True)
+if "tenure" in df.columns:
+    with col2:
+        fig2 = px.box(
+            df,
+            x="Prediction",
+            y="tenure",
+            title="Tenure vs Churn"
+        )
+        st.plotly_chart(fig2, use_container_width=True)
 
 st.divider()
 
 # ---------------- Data Table ----------------
-st.subheader("Detailed Customer Data")
+st.subheader("Customer Data with Predictions")
 st.dataframe(df, use_container_width=True)
 
 # ---------------- Download ----------------
 csv = df.to_csv(index=False).encode("utf-8")
+
 st.download_button(
     label="📥 Download Predictions",
     data=csv,
