@@ -1,64 +1,41 @@
-# streamlit_app.py
 import streamlit as st
 import pandas as pd
-import plotly.express as px
+import numpy as np
 import joblib
 
-# Load the trained model and scaler
-model = joblib.load('models/churn_model.pkl')
-scaler = joblib.load('models/scaler.pkl')
+st.title("Customer Churn Prediction App")
 
-# Load data
-df = pd.read_csv('data/telco-customer-churn.csv')
+# Load model
+model = joblib.load("churn_model.pkl")
 
-# Set page title
-st.title("Customer Churn Prediction Dashboard")
+st.sidebar.header("Customer Details")
 
-# Sidebar filters
-st.sidebar.header("Filter Customers")
-tenure = st.sidebar.slider("Select Customer Tenure", 0, 72, (0, 72))
-churn_status = st.sidebar.selectbox("Select Churn Status", ['All', 'Churned', 'Not Churned'])
+tenure = st.sidebar.slider("Tenure (Months)", 0, 72, 12)
+monthly_charges = st.sidebar.number_input("Monthly Charges", 0.0, 200.0, 70.0)
+total_charges = st.sidebar.number_input("Total Charges", 0.0, 10000.0, 1000.0)
 
-# Filter data based on selected filters
-filtered_df = df[df['tenure'].between(tenure[0], tenure[1])]
-if churn_status != 'All':
-    filtered_df = filtered_df[filtered_df['Churn'] == (1 if churn_status == 'Churned' else 0)]
+contract = st.sidebar.selectbox("Contract Type", ["Month-to-month", "One year", "Two year"])
 
-# Show filtered data in the main panel
-st.write("### Filtered Customer Data", filtered_df)
+# Convert contract to numeric
+contract_map = {
+    "Month-to-month": 0,
+    "One year": 1,
+    "Two year": 2
+}
 
-# Display a churn count bar chart
-churn_count = df['Churn'].value_counts()
-st.write("### Churn Count")
-fig = px.bar(churn_count, x=churn_count.index, y=churn_count.values, labels={'index': 'Churn Status', 'y': 'Count'})
-st.plotly_chart(fig)
+input_data = np.array([[tenure, monthly_charges, total_charges, contract_map[contract]]])
 
-# Scatter plot for Tenure vs Monthly Charges
-fig = px.scatter(df, x="tenure", y="MonthlyCharges", color="Churn", title="Tenure vs Monthly Charges")
-st.plotly_chart(fig)
+if st.button("Predict"):
+    prediction = model.predict(input_data)
 
-# User input for prediction
-st.sidebar.header("Predict Customer Churn")
-tenure_input = st.sidebar.slider("Tenure", 0, 72, 10)
-monthly_charges_input = st.sidebar.number_input("Monthly Charges", min_value=0, max_value=1000, value=70)
-total_charges_input = st.sidebar.number_input("Total Charges", min_value=0, max_value=100000, value=3000)
-gender_input = st.sidebar.selectbox("Gender", ["Male", "Female"])
+    if prediction[0] == 1:
+        st.error("⚠️ Customer is likely to Churn")
+    else:
+        st.success("✅ Customer is likely to Stay")
+st.subheader("Dataset Overview")
 
-# Convert gender to numeric
-gender_numeric = 1 if gender_input == "Female" else 0
+df = pd.read_csv("WA_Fn-UseC_-Telco-Customer-Churn.csv")
+st.dataframe(df.head())
 
-# Prepare input for prediction
-features = pd.DataFrame([[tenure_input, monthly_charges_input, total_charges_input, gender_numeric]], 
-                        columns=['tenure', 'MonthlyCharges', 'TotalCharges', 'Gender'])
-
-# Scale the input features using the loaded scaler
-features_scaled = scaler.transform(features)
-
-# Make prediction
-prediction = model.predict(features_scaled)
-
-# Display the result
-if prediction == 1:
-    st.sidebar.write("The customer is predicted to churn.")
-else:
-    st.sidebar.write("The customer is predicted to not churn.")
+st.subheader("Churn Distribution")
+st.bar_chart(df["Churn"].value_counts())
