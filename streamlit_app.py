@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import joblib
+print("Joblib version:", joblib.__version__)
 
 # Load the pre-trained model and scaler
 model = joblib.load('churn_model.pkl')
