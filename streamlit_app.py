@@ -2,17 +2,20 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
+import plotly.graph_objects as go
 import os
+
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, roc_curve, auc
 
 # ---------------- Page Config ----------------
 st.set_page_config(page_title="Customer Churn Dashboard", layout="wide")
 
-st.title("📊 Customer Churn Interactive Dashboard")
+st.title("📊 Customer Churn Advanced Dashboard")
 
 # ---------------- Train Model ----------------
 @st.cache_resource
@@ -21,17 +24,16 @@ def train_model():
     DATA_FILE = "Telco-Customer-Churn.csv"
 
     if not os.path.exists(DATA_FILE):
-        st.error(f"{DATA_FILE} not found in repository!")
+        st.error(f"{DATA_FILE} not found!")
         st.stop()
 
     df = pd.read_csv(DATA_FILE)
 
-    # Clean TotalCharges safely
+    # Clean Data
     if "TotalCharges" in df.columns:
         df["TotalCharges"] = pd.to_numeric(df["TotalCharges"], errors="coerce")
         df["TotalCharges"] = df["TotalCharges"].fillna(df["TotalCharges"].mean())
 
-    # Drop customerID safely
     if "customerID" in df.columns:
         df = df.drop("customerID", axis=1)
 
@@ -39,7 +41,6 @@ def train_model():
     y = df["Churn"].map({"No": 0, "Yes": 1})
 
     categorical_cols = X.select_dtypes(include="object").columns
-    numeric_cols = X.select_dtypes(exclude="object").columns
 
     preprocessor = ColumnTransformer(
         transformers=[
@@ -48,10 +49,12 @@ def train_model():
         remainder="passthrough"
     )
 
+    model = LogisticRegression(max_iter=1000)
+
     pipeline = Pipeline(
         steps=[
             ("preprocessor", preprocessor),
-            ("classifier", LogisticRegression(max_iter=1000))
+            ("classifier", model)
         ]
     )
 
@@ -61,13 +64,31 @@ def train_model():
 
     pipeline.fit(X_train, y_train)
 
-    return pipeline, df
+    # Accuracy
+    y_pred = pipeline.predict(X_test)
+    accuracy = accuracy_score(y_test, y_pred)
+
+    # ROC
+    y_prob = pipeline.predict_proba(X_test)[:, 1]
+    fpr, tpr, _ = roc_curve(y_test, y_prob)
+    roc_auc = auc(fpr, tpr)
+
+    # Feature importance (Logistic Regression coefficients)
+    feature_names = pipeline.named_steps["preprocessor"].get_feature_names_out()
+    coefficients = pipeline.named_steps["classifier"].coef_[0]
+
+    feature_importance = pd.DataFrame({
+        "Feature": feature_names,
+        "Importance": coefficients
+    }).sort_values(by="Importance", key=abs, ascending=False)
+
+    return pipeline, df, accuracy, fpr, tpr, roc_auc, feature_importance
 
 
-model, full_df = train_model()
+model, full_df, accuracy, fpr, tpr, roc_auc, feature_importance = train_model()
 
 # ---------------- Sidebar Filters ----------------
-st.sidebar.header("Filter Customers")
+st.sidebar.header("Filters")
 
 df = full_df.copy()
 
@@ -89,48 +110,54 @@ if "Contract" in df.columns:
 
 # ---------------- Prediction ----------------
 X_pred = df.drop("Churn", axis=1, errors="ignore")
-
 predictions = model.predict(X_pred)
-
 df["Prediction"] = np.where(predictions == 1, "Churn", "No Churn")
 
 # ---------------- KPI Section ----------------
 total_customers = len(df)
 churn_count = len(df[df["Prediction"] == "Churn"])
-no_churn_count = len(df[df["Prediction"] == "No Churn"])
-
 churn_rate = round((churn_count / total_customers) * 100, 2) if total_customers > 0 else 0
 
-col1, col2, col3, col4 = st.columns(4)
-
+col1, col2, col3 = st.columns(3)
 col1.metric("Total Customers", total_customers)
-col2.metric("Churn Customers", churn_count)
-col3.metric("No Churn Customers", no_churn_count)
-col4.metric("Churn Rate (%)", churn_rate)
+col2.metric("Churn Rate (%)", churn_rate)
+col3.metric("Model Accuracy", round(accuracy * 100, 2))
 
 st.divider()
 
-# ---------------- Charts ----------------
-col1, col2 = st.columns(2)
+# ---------------- ROC Curve ----------------
+st.subheader("📈 ROC Curve")
 
-with col1:
-    fig1 = px.histogram(
-        df,
-        x="Prediction",
-        title="Churn Distribution",
-        text_auto=True
-    )
-    st.plotly_chart(fig1, use_container_width=True)
+roc_fig = go.Figure()
+roc_fig.add_trace(go.Scatter(x=fpr, y=tpr, mode="lines",
+                             name=f"ROC Curve (AUC = {roc_auc:.2f})"))
+roc_fig.add_trace(go.Scatter(x=[0, 1], y=[0, 1], mode="lines",
+                             line=dict(dash="dash"),
+                             name="Random Model"))
 
-if "tenure" in df.columns:
-    with col2:
-        fig2 = px.box(
-            df,
-            x="Prediction",
-            y="tenure",
-            title="Tenure vs Churn"
-        )
-        st.plotly_chart(fig2, use_container_width=True)
+roc_fig.update_layout(
+    xaxis_title="False Positive Rate",
+    yaxis_title="True Positive Rate"
+)
+
+st.plotly_chart(roc_fig, use_container_width=True)
+
+st.divider()
+
+# ---------------- Feature Importance ----------------
+st.subheader("🔥 Feature Importance")
+
+top_features = feature_importance.head(15)
+
+fig_importance = px.bar(
+    top_features,
+    x="Importance",
+    y="Feature",
+    orientation="h",
+    title="Top 15 Important Features"
+)
+
+st.plotly_chart(fig_importance, use_container_width=True)
 
 st.divider()
 
