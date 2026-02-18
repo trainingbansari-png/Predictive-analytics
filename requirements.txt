@@ -3,4 +3,4 @@ scikit-learn
 joblib
 streamlit
 plotly
-altair
+altair.vegalite.v4
